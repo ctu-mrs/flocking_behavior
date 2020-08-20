@@ -7,9 +7,9 @@ namespace formation
 /* onInit() //{ */
 void Formation::onInit() {
   /* set flags to false */
-  is_initialized_ = false;
-  hover_mode_     = false;
-  swarming_mode_  = false;
+  is_initialized_        = false;
+  hover_mode_            = false;
+  swarming_mode_         = false;
   state_machine_running_ = false;
 
   ros::NodeHandle nh("~");
@@ -47,7 +47,7 @@ void Formation::onInit() {
 
   /* set remaining parameters using loaded ones */
   noise_           = _desired_distance_ / pow(2, 1 / _steepness_potential_);
-  max_range_       = _range_multipler_  * _desired_distance_;
+  max_range_       = _range_multipler_ * _desired_distance_;
   virtual_heading_ = 0.0;
 
   /* publishers */
@@ -90,28 +90,34 @@ void Formation::callbackUAVNeighbors(const flocking::Neighbors::ConstPtr& neighb
   if (!is_initialized_ || !swarming_mode_)
     return;
 
+  /* calculate virtual heading */
+  const double heading = mrs_lib::AttitudeConverter(odom->pose.pose.orientation).getHeading();
+  virtual_heading_     = mrs_lib::interpolateAngles(virtual_heading_, heading, _interpolate_coeff_);
+
   /* calculate proximal control vector */
-  double prox_vector_x = 0.0, prox_vector_y = 0.0, prox_magnitude;
+  double       prox_vector_x = 0.0, prox_vector_y = 0.0, prox_magnitude;
+  double       bearing_sum       = 0.0;
+  unsigned int visible_neighbors = 0;
+
   if (neighbors->num_neighbors > 0) {
     for (unsigned int i = 0; i < neighbors->num_neighbors; i++) {
       if (neighbors->range[i] <= max_range_) {
         prox_magnitude = Formation::getProximalMagnitude(neighbors->range[i]);
         prox_vector_x += prox_magnitude * cos(neighbors->bearing[i]);
         prox_vector_y += prox_magnitude * sin(neighbors->bearing[i]);
+
+        visible_neighbors++;
+        bearing_sum += neighbors->bearing[i];
       }
     }
   }
 
   /* convert flocking control (f = p) vector to angular and linear movement */
-  double u = prox_vector_x * _K1_ + _move_forward_;
-  double w = prox_vector_y * _K2_;
-
-  /* calculate virtual heading */
-  double heading   = mrs_lib::AttitudeConverter(odom->pose.pose.orientation).getHeading();
-  virtual_heading_ = mrs_lib::interpolateAngles(virtual_heading_, heading, _interpolate_coeff_);
+  const double u = prox_vector_x * _K1_ + _move_forward_;
+  const double w = prox_vector_y * _K2_;
 
   /* create reference stamped msg */
-  mrs_msgs::ReferenceStampedSrv srv_reference_stamped_msg;    
+  mrs_msgs::ReferenceStampedSrv srv_reference_stamped_msg;
 
   /* fill in header */
   srv_reference_stamped_msg.request.header.stamp    = ros::Time::now();
@@ -121,15 +127,20 @@ void Formation::callbackUAVNeighbors(const flocking::Neighbors::ConstPtr& neighb
   srv_reference_stamped_msg.request.reference.position.x = odom->pose.pose.position.x + u * cos(heading);
   srv_reference_stamped_msg.request.reference.position.y = odom->pose.pose.position.y + u * sin(heading);
   srv_reference_stamped_msg.request.reference.position.z = _desired_height_;
-  srv_reference_stamped_msg.request.reference.heading    = virtual_heading_ + w;
-    
-  /* request service */
-  if (srv_client_goto_.call(srv_reference_stamped_msg)) {
-    
+
+  if (visible_neighbors > 0) {
+    const double bearing_avg                            = bearing_sum / (double)visible_neighbors;
+    srv_reference_stamped_msg.request.reference.heading = mrs_lib::normalize_angle(heading + bearing_avg);
   } else {
-     ROS_ERROR("Failed to call service.\n");
+    srv_reference_stamped_msg.request.reference.heading = virtual_heading_ + w;
   }
 
+  /* request service */
+  if (srv_client_goto_.call(srv_reference_stamped_msg)) {
+
+  } else {
+    ROS_ERROR("Failed to call service.\n");
+  }
 }
 
 //}
@@ -151,7 +162,7 @@ void Formation::callbackTimerStateMachine([[maybe_unused]] const ros::TimerEvent
 
     /* create mode stamped msg */
     flocking::ModeStamped ms;
-    
+
     /* fill in msg */
     ms.header.frame_id = _uav_name_;
     ms.header.stamp    = ros::Time::now();
@@ -177,7 +188,7 @@ void Formation::callbackTimerAbortFlocking([[maybe_unused]] const ros::TimerEven
 
   /* create mode stamped msg */
   flocking::ModeStamped ms;
-    
+
   /* fill in msg */
   ms.header.frame_id = _uav_name_;
   ms.header.stamp    = ros::Time::now();
@@ -211,7 +222,7 @@ void Formation::callbackTimerAbortFlocking([[maybe_unused]] const ros::TimerEven
 /* callbackStartStateMachine() //{ */
 
 bool Formation::callbackStartStateMachine([[maybe_unused]] std_srvs::Trigger::Request& req, std_srvs::Trigger::Response& res) {
-  if(!_auto_start_){
+  if (!_auto_start_) {
     ROS_WARN("[Formation]: The automatic start is not on. The hover and swarming mode should start manually.");
     res.message = "[Formation]: The automatic start is not on. The hover and swarming mode should start manually.";
     res.success = false;
@@ -240,7 +251,7 @@ bool Formation::callbackStartStateMachine([[maybe_unused]] std_srvs::Trigger::Re
 
   /* create mode stamped msg */
   flocking::ModeStamped ms;
-    
+
   /* fill in msg */
   ms.header.frame_id = _uav_name_;
   ms.header.stamp    = ros::Time::now();
@@ -280,7 +291,7 @@ bool Formation::callbackStartHoverMode([[maybe_unused]] std_srvs::Trigger::Reque
 
   /* create mode stamped msg */
   flocking::ModeStamped ms;
-    
+
   /* fill in msg */
   ms.header.frame_id = _uav_name_;
   ms.header.stamp    = ros::Time::now();
@@ -321,13 +332,13 @@ bool Formation::callbackStartSwarmingMode([[maybe_unused]] std_srvs::Trigger::Re
   ROS_INFO("[Formation]: Starting the swarming mode");
   res.message = "Starting the swarming mode";
   res.success = true;
-  
+
   /* change code to swarming mode */
   swarming_mode_ = true;
 
   /* create mode stamped msg */
   flocking::ModeStamped ms;
-    
+
   /* fill in msg */
   ms.header.frame_id = _uav_name_;
   ms.header.stamp    = ros::Time::now();
@@ -369,7 +380,7 @@ bool Formation::callbackCloseNode([[maybe_unused]] std_srvs::Trigger::Request& r
 
   /* create mode stamped msg */
   flocking::ModeStamped ms;
-    
+
   /* fill in msg */
   ms.header.frame_id = _uav_name_;
   ms.header.stamp    = ros::Time::now();
@@ -391,7 +402,7 @@ bool Formation::callbackCloseNode([[maybe_unused]] std_srvs::Trigger::Request& r
 
   /* reset message filter */
   sync_.reset();
-  
+
   /* shutdown node */
   ros::shutdown();
 
