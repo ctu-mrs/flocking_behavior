@@ -42,7 +42,7 @@ input=(
 '
   'Flocking-relative_localization' 'waitForOdometry; roslaunch flocking sensor_neighbor.launch config_sensor_type:=./custom_configs/sensor_type.yaml
 '
-  'UVDAR' 'waitForOdometry; TODO: roslaunch roslaunch uvdar_core multi_frequency_test.launch
+  'UVDAR' 'waitForOdometry; roslaunch roslaunch flocking uvdar.launch
 '
   'UVDAR-KF' 'waitForOdometry; roslaunch uvdar_core uvdar_kalman_identified.launch output_frame:='"$UAV_NAME"'/stable_origin
 '
