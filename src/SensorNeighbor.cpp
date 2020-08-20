@@ -18,7 +18,7 @@ void SensorNeighbor::onInit() {
   mrs_lib::ParamLoader param_loader(nh, "SensorNeighbor");
 
   /* load parameters */
-  param_loader.loadParam("sensor_type", _sensor_type_);
+  param_loader.loadParam<std::string>("sensor_type", _sensor_type_, "gps");
   param_loader.loadParam("uav_name", _this_uav_name_);
 
   if (!param_loader.loadedSuccessfully()) {
@@ -149,7 +149,7 @@ void SensorNeighbor::callbackNeighborsUsingUVDAR(const mrs_msgs::PoseWithCovaria
     std::scoped_lock lock(mutex_this_uav_pose_);
     odom_frame_id = this_uav_pose_.header.frame_id;
   }
-  
+
   auto tf = tfr_.getTransform(array_poses->header.frame_id, odom_frame_id);
   if (!tf.has_value()) {
     ROS_WARN("Could not transform pose from %s to %s", array_poses->header.frame_id.c_str(), odom_frame_id.c_str());
@@ -212,7 +212,7 @@ void SensorNeighbor::callbackTimerPubNeighbors([[maybe_unused]] const ros::Timer
     std::scoped_lock lock(mutex_neighbors_position_);
 
     for (auto itr = neighbors_position_.begin(); itr != neighbors_position_.end(); ++itr) {
-      if ((now - itr->second.header.stamp).toSec() < 2.0) {
+      if ((now - itr->second.header.stamp).toSec() < 1.0) {
         const double range   = sqrt(pow(focal_x - itr->second.point.x, 2) + pow(focal_y - itr->second.point.y, 2));
         const double bearing = math_utils::relativeBearing(focal_x, focal_y, focal_heading, itr->second.point.x, itr->second.point.y);
 
