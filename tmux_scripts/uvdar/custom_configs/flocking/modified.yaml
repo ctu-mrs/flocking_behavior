@@ -1,0 +1,10 @@
+# increase duration
+flocking:
+
+  duration: 480 # [s]
+
+  proximal:
+    desired_distance: 4.0 
+  
+  motion:
+    K2: 0.2
